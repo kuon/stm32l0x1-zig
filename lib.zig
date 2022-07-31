@@ -7,8 +7,8 @@ fn root() []const u8 {
 
 pub fn Lib(comptime microzig: anytype) type {
     return struct {
-        const chips = struct {
-            const stm32l011f3px = microzig.Chip{
+        pub const chips = struct {
+            pub const stm32l011f3px = microzig.Chip{
                 .name = "STM32L011F3Px",
                 .path = root() ++ "src/registers.zig",
                 .cpu = microzig.cpus.cortex_m0plus,
@@ -17,7 +17,7 @@ pub fn Lib(comptime microzig: anytype) type {
                     .{ .kind = .ram, .offset = 0x20000000, .length = 2 * 1024 },
                 },
             };
-            const stm32l011f4px = microzig.Chip{
+            pub const stm32l011f4px = microzig.Chip{
                 .name = "STM32L011F4Px",
                 .path = root() ++ "src/registers.zig",
                 .cpu = microzig.cpus.cortex_m0plus,
@@ -27,7 +27,7 @@ pub fn Lib(comptime microzig: anytype) type {
                 },
             };
         };
-        const pkg = Pkg{
+        pub const pkg = Pkg{
             .name = "stm32l0x1",
             .source = .{ .path = root() ++ "src/lib.zig" },
         };
