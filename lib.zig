@@ -29,7 +29,10 @@ pub fn Lib(comptime microzig: anytype) type {
         };
         pub const pkg = Pkg{
             .name = "stm32l0x1",
-            .source = .{ .path = root() ++ "src/lib.zig" },
+            .source = .{
+                .path = root() ++ "src/lib.zig",
+            },
+            .dependencies = &.{microzig.pkgs.microzig},
         };
     };
 }
