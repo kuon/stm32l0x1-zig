@@ -5,7 +5,7 @@ fn root() []const u8 {
     return (std.fs.path.dirname(@src().file) orelse unreachable) ++ "/";
 }
 
-pub fn Lib(comptime microzig: anytype) type {
+pub fn Lib(comptime microzig: type) type {
     return struct {
         pub const chips = struct {
             pub const stm32l011f3px = microzig.Chip{
