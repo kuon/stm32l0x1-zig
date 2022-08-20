@@ -5,6 +5,28 @@ const regs = microzig.chip.registers;
 const core = @import("core.zig");
 const set = core.set_reg_field;
 
+pub const Direction = enum(u1) {
+    write = 0,
+    read = 1,
+};
+
+const Address = enum {
+    bit_7,
+    bit_10,
+};
+
+const StartConfig = struct {
+    slave_address: union(Address) {
+        bit_7: u7,
+        bit_10: u10,
+    },
+    autoend: bool = true,
+    reload: bool = false,
+    direction: Direction = .read,
+    byte_count: usize = 0,
+    packet_error_checking_byte: bool = false,
+};
+
 pub fn I2C(comptime port_number: u3) type {
     if (port_number != 1) unreachable;
     const port_name = std.fmt.comptimePrint("{d}", .{port_number});
@@ -132,6 +154,14 @@ pub fn I2C(comptime port_number: u3) type {
                 .tx_interrupt_status => isr.TXIS == 1,
             };
         }
+        pub fn has_error() bool {
+            return has_flag(.alert) or
+                has_flag(.timeout) or
+                has_flag(.pec_error) or
+                has_flag(.overrun) or
+                has_flag(.arbitration_lost) or
+                has_flag(.bus_error);
+        }
         pub fn set_flag(flag: enum {
             tx_empty,
         }) void {
@@ -167,7 +197,7 @@ pub fn I2C(comptime port_number: u3) type {
                 .ALERTCF = 1,
                 .TIMOUTCF = 1,
                 .PECCF = 1,
-                .OVFCF = 1,
+                .OVRCF = 1,
                 .ARLOCF = 1,
                 .BERRCF = 1,
                 .STOPCF = 1,
@@ -243,10 +273,6 @@ pub fn I2C(comptime port_number: u3) type {
                 }),
             }
         }
-        const Address = enum {
-            bit_7,
-            bit_10,
-        };
         pub fn set_own_address(addr: union(Address) {
             bit_7: u7,
             bit_10: u10,
@@ -265,47 +291,14 @@ pub fn I2C(comptime port_number: u3) type {
                 }),
             }
         }
-        pub fn set_slave_address(addr: union(Address) {
-            bit_7: u7,
-            bit_10: u10,
-        }) void {
-            switch (addr) {
-                .bit_7 => |val| port.CR2.modify(.{
-                    .SADD = @intCast(u10, val) << 1,
-                    .ADD10 = 0,
-                }),
-                .bit_10 => |val| port.CR2.modify(.{
-                    .SADD = val,
-                    .ADD10 = 1,
-                }),
-            }
-        }
         pub fn set_10bit_header(enabled: bool) void {
             port.CR2.modify(.{ .HEAD10R = @boolToInt(enabled) });
-        }
-        pub fn start() void {
-            port.CR2.modify(.{ .START = 1 });
         }
         pub fn stop() void {
             port.CR2.modify(.{ .STOP = 1 });
         }
         pub fn nack() void {
             port.CR2.modify(.{ .NACK = 1 });
-        }
-        pub fn set_direction(dir: enum(u1) { write = 0, read = 1 }) void {
-            port.CR2.modify(.{ .RD_WRN = @enumToInt(dir) });
-        }
-        pub fn set_byte_count(n: u8) void {
-            port.CR2.modify(.{ .NBYTES = n });
-        }
-        pub fn set_autoend(enabled: bool) void {
-            port.CR2.modify(.{ .AUTOEND = @boolToInt(enabled) });
-        }
-        pub fn set_reload(enabled: bool) void {
-            port.CR2.modify(.{ .RELOAD = @boolToInt(enabled) });
-        }
-        pub fn set_packet_error_checking_byte(enabled: bool) void {
-            port.CR2.modify(.{ .PECBYTE = @boolToInt(enabled) });
         }
         pub fn wait_until_finished() !void {
             try core.timeout_wait_for(100, port.ISR, .BUSY, 0);
@@ -315,6 +308,22 @@ pub fn I2C(comptime port_number: u3) type {
         }
         pub fn write_data(data: u8) void {
             port.TXDR.modify(.{ .TXDATA = data });
+        }
+
+        pub fn start(config: StartConfig) void {
+            const addr: [2]u10 = switch (config.slave_address) {
+                .bit_7 => |val| .{ @intCast(u10, val) << 1, 0 },
+                .bit_10 => |val| .{ val, 1 },
+            };
+            port.CR2.modify(.{
+                .SADD = addr[0],
+                .ADD10 = @intCast(u1, addr[1]),
+                .AUTOEND = @boolToInt(config.autoend),
+                .RD_WRN = @enumToInt(config.direction),
+                .NBYTES = @intCast(u8, config.byte_count),
+                .PECBYTE = @boolToInt(config.packet_error_checking_byte),
+                .START = 1,
+            });
         }
     };
 }
