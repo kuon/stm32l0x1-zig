@@ -93,6 +93,9 @@ pub fn Channel(comptime channel_number: u3) type {
         pub fn set_data_count(count: u16) void {
             cndtr.modify(.{ .NDT = count });
         }
+        pub fn data_count() u16 {
+            return cndtr.read().NDT;
+        }
         pub fn set_interrupt(name: enum {
             transfer_completed,
             transfer_error,
@@ -115,6 +118,7 @@ pub fn Channel(comptime channel_number: u3) type {
         }
         pub fn disable() void {
             ccr.modify(.{ .EN = 0 });
+            clear_flags();
         }
         pub fn has_flag(flag: enum {
             transfer_completed,
