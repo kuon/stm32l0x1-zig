@@ -4,3 +4,4 @@ pub const spi = @import("spi.zig");
 pub const i2c = @import("i2c.zig");
 pub const dma = @import("dma.zig");
 pub const lpuart = @import("lpuart.zig");
+pub const crc = @import("crc.zig");

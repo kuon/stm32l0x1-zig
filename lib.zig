@@ -2,7 +2,7 @@ const std = @import("std");
 const Pkg = std.build.Pkg;
 
 fn root() []const u8 {
-    return (std.fs.path.dirname(@src().file) orelse unreachable) ++ "/";
+    return comptime (std.fs.path.dirname(@src().file) orelse unreachable) ++ "/";
 }
 
 pub fn Lib(comptime microzig: type) type {

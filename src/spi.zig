@@ -1,9 +1,17 @@
 const std = @import("std");
 const microzig = @import("microzig");
 const regs = microzig.chip.registers;
+const gpio = @import("gpio.zig");
 
 const set = @import("core.zig").set_reg_field;
 const wait_for = @import("core.zig").wait_for;
+
+const InitConfig = struct {
+    cs: ?[]const u8 = null,
+    clk: []const u8,
+    miso: []const u8,
+    mosi: []const u8,
+};
 
 pub fn SPI(comptime port_number: u3) type {
     if (port_number != 1) unreachable;
@@ -11,6 +19,45 @@ pub fn SPI(comptime port_number: u3) type {
     const port = @field(regs, "SPI" ++ port_name);
 
     return struct {
+        pub fn init_pins(comptime config: InitConfig) void {
+            reset();
+            enable_clock();
+
+            const clk = gpio.Pin(config.clk);
+            const miso = gpio.Pin(config.miso);
+            const mosi = gpio.Pin(config.mosi);
+
+            clk.enable_port_clock();
+            clk.push_pull();
+            clk.pull_up();
+            clk.alternate();
+            clk.medium_speed();
+            clk.alternate_fun("SPI" ++ port_name ++ "_SCK");
+
+            miso.enable_port_clock();
+            miso.push_pull();
+            miso.pull_up();
+            miso.alternate();
+            miso.medium_speed();
+            miso.alternate_fun("SPI" ++ port_name ++ "_MISO");
+
+            mosi.enable_port_clock();
+            mosi.push_pull();
+            mosi.pull_up();
+            mosi.alternate();
+            mosi.medium_speed();
+            mosi.alternate_fun("SPI" ++ port_name ++ "_MOSI");
+
+            if (config.cs) |csn| {
+                const cs = gpio.Pin(csn);
+                cs.enable_port_clock();
+                cs.push_pull();
+                cs.pull_up();
+                cs.alternate();
+                cs.medium_speed();
+                cs.alternate_fun("SPI" ++ port_name ++ "_NSS");
+            }
+        }
         pub fn dma_address() u32 {
             return @ptrToInt(&port.DR.raw);
         }
@@ -26,6 +73,12 @@ pub fn SPI(comptime port_number: u3) type {
             // Reset API
             set(regs.RCC.APB2RSTR, "SPI" ++ port_name ++ "RST", 1);
             set(regs.RCC.APB2RSTR, "SPI" ++ port_name ++ "RST", 0);
+        }
+        pub fn clear() void {
+            write(0);
+            if (port.SR.read().RXNE == 1) {
+                _ = port.DR.read();
+            }
         }
         pub fn enable() void {
             port.CR1.modify(.{ .SPE = 1 });
@@ -187,20 +240,27 @@ pub fn SPI(comptime port_number: u3) type {
             }
         }
         pub fn set_dma(name: enum {
+            none,
             rx,
             tx,
             rx_tx,
-        }, enabled: bool) void {
+        }) void {
             switch (name) {
+                .none => port.CR2.modify(.{
+                    .RXDMAEN = 0,
+                    .TXDMAEN = 0,
+                }),
                 .rx => port.CR2.modify(.{
-                    .RXDMAEN = @boolToInt(enabled),
+                    .RXDMAEN = 1,
+                    .TXDMAEN = 0,
                 }),
                 .tx => port.CR2.modify(.{
-                    .TXDMAEN = @boolToInt(enabled),
+                    .RXDMAEN = 0,
+                    .TXDMAEN = 1,
                 }),
                 .rx_tx => port.CR2.modify(.{
-                    .RXDMAEN = @boolToInt(enabled),
-                    .TXDMAEN = @boolToInt(enabled),
+                    .RXDMAEN = 1,
+                    .TXDMAEN = 1,
                 }),
             }
         }

@@ -1,6 +1,7 @@
 const std = @import("std");
 const microzig = @import("microzig");
 const regs = microzig.chip.registers;
+const gpio = @import("gpio.zig");
 
 const core = @import("core.zig");
 const set = core.set_reg_field;
@@ -10,21 +11,47 @@ pub const Direction = enum(u1) {
     read = 1,
 };
 
-const Address = enum {
+const AddressTag = enum {
+    none,
     bit_7,
     bit_10,
 };
 
+const Address = union(AddressTag) {
+    none: void,
+    bit_7: u7,
+    bit_10: u10,
+};
+
+const DigitalFilterTag = enum {
+    disabled,
+    clk,
+};
+
+const DigitalFilter = union(DigitalFilterTag) {
+    disabled: void,
+    clk: u4,
+};
+
 const StartConfig = struct {
-    slave_address: union(Address) {
-        bit_7: u7,
-        bit_10: u10,
-    },
+    slave_address: Address,
     autoend: bool = true,
     reload: bool = false,
     direction: Direction = .read,
     byte_count: usize = 0,
     packet_error_checking_byte: bool = false,
+};
+
+const Speed = enum {
+    kHz_10,
+    kHz_100,
+    kHz_400,
+    kHz_1000,
+};
+
+const InitConfig = struct {
+    scl: []const u8,
+    sda: []const u8,
 };
 
 pub fn I2C(comptime port_number: u3) type {
@@ -33,6 +60,23 @@ pub fn I2C(comptime port_number: u3) type {
     const port = @field(regs, "I2C" ++ port_name);
 
     return struct {
+        pub fn init_pins(comptime config: InitConfig) void {
+            reset();
+            enable_clock();
+
+            const scl = gpio.Pin(config.scl);
+            const sda = gpio.Pin(config.sda);
+
+            scl.enable_port_clock();
+            scl.open_drain();
+            scl.floating();
+            scl.alternate_fun("I2C" ++ port_name ++ "_SCL");
+
+            sda.enable_port_clock();
+            sda.open_drain();
+            sda.floating();
+            sda.alternate_fun("I2C" ++ port_name ++ "_SDA");
+        }
         pub fn dma_rx_address() u32 {
             return @ptrToInt(&port.RXDR.raw);
         }
@@ -61,12 +105,7 @@ pub fn I2C(comptime port_number: u3) type {
         pub fn disable() void {
             port.CR1.modify(.{ .PE = 0 });
         }
-        pub fn set_speed(speed: enum {
-            kHz_10,
-            kHz_100,
-            kHz_400,
-            kHz_1000,
-        }) void {
+        pub fn set_speed(speed: Speed) void {
             const vals: [5]u8 = switch (speed) {
                 .kHz_10 => .{ 3, 0xC7, 0xC3, 0x2, 0x4 },
                 .kHz_100 => .{ 3, 0x13, 0xF, 0x2, 0x4 },
@@ -241,14 +280,7 @@ pub fn I2C(comptime port_number: u3) type {
             }
         }
 
-        const DigitalFilter = enum {
-            disabled,
-            clk,
-        };
-        pub fn set_digital_filter(mode: union(DigitalFilter) {
-            disabled: void,
-            clk: u4,
-        }) void {
+        pub fn set_digital_filter(mode: DigitalFilter) void {
             const val = switch (mode) {
                 .disabled => 0,
                 .clk => |val| val,
@@ -256,29 +288,38 @@ pub fn I2C(comptime port_number: u3) type {
             port.CR1.modify(.{ .DNF = val });
         }
         pub fn set_dma(name: enum {
+            none,
             rx,
             tx,
             rx_tx,
-        }, enabled: bool) void {
+        }) void {
             switch (name) {
+                .none => port.CR1.modify(.{
+                    .RXDMAEN = 0,
+                    .TXDMAEN = 0,
+                }),
                 .rx => port.CR1.modify(.{
-                    .RXDMAEN = @boolToInt(enabled),
+                    .RXDMAEN = 1,
+                    .TXDMAEN = 0,
                 }),
                 .tx => port.CR1.modify(.{
-                    .TXDMAEN = @boolToInt(enabled),
+                    .TXDMAEN = 1,
+                    .RXDMAEN = 0,
                 }),
                 .rx_tx => port.CR1.modify(.{
-                    .RXDMAEN = @boolToInt(enabled),
-                    .TXDMAEN = @boolToInt(enabled),
+                    .RXDMAEN = 1,
+                    .TXDMAEN = 1,
                 }),
             }
         }
-        pub fn set_own_address(addr: union(Address) {
-            bit_7: u7,
-            bit_10: u10,
-        }) void {
+        pub fn set_own_address(addr: Address) void {
             port.OAR1.modify(.{ .OA1EN = 0 });
             switch (addr) {
+                .none => port.OAR1.modify(.{
+                    .OA1 = 0,
+                    .OA1MODE = 0,
+                    .OA1EN = 0,
+                }),
                 .bit_7 => |val| port.OAR1.modify(.{
                     .OA1 = @intCast(u10, val) << 1,
                     .OA1MODE = 0,
@@ -312,6 +353,7 @@ pub fn I2C(comptime port_number: u3) type {
 
         pub fn start(config: StartConfig) void {
             const addr: [2]u10 = switch (config.slave_address) {
+                .none => .{ 0, 0 },
                 .bit_7 => |val| .{ @intCast(u10, val) << 1, 0 },
                 .bit_10 => |val| .{ val, 1 },
             };
@@ -324,6 +366,90 @@ pub fn I2C(comptime port_number: u3) type {
                 .PECBYTE = @boolToInt(config.packet_error_checking_byte),
                 .START = 1,
             });
+        }
+
+        pub fn transfer(addr: u7, tx: []const u8, rx: []u8) !void {
+            const writing = tx.len > 0;
+            const reading = rx.len > 0;
+
+            // wait until i2c is not busy
+            try wait_until_finished();
+
+            if (writing) {
+                // auto end only if we will not read after write
+                try start_rw(addr, tx.len, .write, !reading);
+
+                // send bytes
+                for (tx) |b| {
+                    try send_byte(b);
+                }
+
+                // wait for i2c transfer to finish (only if reading after)
+                if (reading) {
+                    while (!has_flag(.transfer_completed)) {
+                        if (has_error()) {
+                            return error.TransferError;
+                        }
+                    }
+                }
+            }
+
+            if (reading) {
+                try start_rw(addr, rx.len, .read, true);
+
+                // recv bytes
+                for (rx) |*b| {
+                    b.* = try recv_byte();
+                }
+            }
+        }
+
+        fn start_rw(
+            addr: u7,
+            len: usize,
+            direction: Direction,
+            autoend: bool,
+        ) !void {
+            // Ensure tx is empty
+            set_flag(.tx_empty);
+
+            // Read any data to flush rx
+            while (has_flag(.rx_buffer_not_empty)) {
+                _ = read_data();
+                if (has_error()) {
+                    return error.StartError;
+                }
+            }
+            start(.{
+                .autoend = autoend,
+                .direction = direction,
+                .byte_count = len,
+                .slave_address = .{ .bit_7 = addr },
+            });
+        }
+
+        fn send_byte(b: u8) !void {
+            while (!has_flag(.tx_buffer_empty)) {
+                if (has_error()) {
+                    return error.SendError;
+                }
+            }
+
+            write_data(b);
+
+            if (has_error()) {
+                return error.SendError;
+            }
+        }
+
+        fn recv_byte() !u8 {
+            while (!has_flag(.rx_buffer_not_empty)) {
+                if (has_error()) {
+                    return error.SendError;
+                }
+            }
+
+            return read_data();
         }
     };
 }

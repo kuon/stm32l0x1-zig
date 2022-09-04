@@ -3,6 +3,9 @@ const microzig = @import("microzig");
 const regs = microzig.chip.registers;
 
 const set = @import("core.zig").set_reg_field;
+const get = @import("core.zig").reg_field;
+
+const alternates = @import("alternates.zig");
 
 pub fn Pin(comptime spec: []const u8) type {
     const invalid_format_msg = "The given pin '" ++ spec ++ "' has an invalid format. Pins must follow the format \"P{Port}{Pin}\" scheme.";
@@ -67,6 +70,21 @@ pub fn Pin(comptime spec: []const u8) type {
                 set(port.AFRL, "AFSEL" ++ suffix, mode);
             }
         }
+        pub fn alternate_fun(comptime mode: []const u8) void {
+            alternate();
+            alternate_mode(
+                @field(
+                    @field(
+                        @field(
+                            alternates,
+                            @tagName(microzig.config.chip_name),
+                        ),
+                        spec,
+                    ),
+                    mode,
+                ),
+            );
+        }
         pub fn floating_output() void {
             enable_port_clock();
             push_pull();
@@ -80,6 +98,46 @@ pub fn Pin(comptime spec: []const u8) type {
         pub fn high() void {
             // Set pin as high
             set(port.ODR, "OD" ++ suffix, 1);
+        }
+        pub fn configure_interrupt(mode: enum {
+            none,
+            rising,
+            falling,
+            both,
+        }) void {
+            // Map interrupt
+            const val = switch (port_name) {
+                "A" => 0b0000,
+                "B" => 0b0001,
+                "C" => 0b0010,
+                "D" => 0b0011,
+                "E" => 0b0100,
+                "F" => 0b0101,
+                else => 0,
+            };
+            const reg = if (pin_number < 4)
+                regs.SYSCFG_COMP.EXTICR1
+            else if (pin_number < 8)
+                regs.SYSCFG_COMP.EXTICR2
+            else if (pin_number < 12)
+                regs.SYSCFG_COMP.EXTICR3
+            else if (pin_number < 16)
+                regs.SYSCFG_COMP.EXTICR4;
+
+            set(reg, "EXTI" ++ suffix, val);
+
+            const enabled = mode != .none;
+            const rising = mode == .rising or mode == .both;
+            const falling = mode == .falling or mode == .both;
+            set(regs.EXTI.IMR, "IM" ++ suffix, @boolToInt(enabled));
+            set(regs.EXTI.RTSR, "RT" ++ suffix, @boolToInt(rising));
+            set(regs.EXTI.FTSR, "FT" ++ suffix, @boolToInt(falling));
+        }
+        pub fn has_interrupt() bool {
+            return get(regs.EXTI.PR, "PIF" ++ suffix) == 1;
+        }
+        pub fn clear_interrupt() void {
+            set(regs.EXTI.PR, "PIF" ++ suffix, 1);
         }
     };
 }
