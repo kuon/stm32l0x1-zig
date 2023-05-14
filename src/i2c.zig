@@ -1,6 +1,6 @@
 const std = @import("std");
 const microzig = @import("microzig");
-const regs = microzig.chip.registers;
+const regs = microzig.chip.peripherals;
 const gpio = @import("gpio.zig");
 
 const core = @import("core.zig");
@@ -78,26 +78,30 @@ pub fn I2C(comptime port_number: u3) type {
             sda.alternate_fun("I2C" ++ port_name ++ "_SDA");
         }
         pub fn dma_rx_address() u32 {
-            return @ptrToInt(&port.RXDR.raw);
+            // FIXME
+            return 0;
+            // return @ptrToInt(&port.RXDR.raw);
         }
         pub fn dma_tx_address() u32 {
-            return @ptrToInt(&port.TXDR.raw);
+            // FIXME
+            return 0;
+            // return @ptrToInt(&port.TXDR.raw);
         }
         pub fn enable_clock() void {
             // Enable clock
-            set(regs.RCC.APB1ENR, "I2C" ++ port_name ++ "EN", 1);
+            set(&regs.RCC.APB1ENR, "I2C" ++ port_name ++ "EN", 1);
 
-            set(regs.RCC.CCIPR, "I2C" ++ port_name ++ "SEL0", 0b0); // hsi16
-            set(regs.RCC.CCIPR, "I2C" ++ port_name ++ "SEL1", 0b1); // hsi16
+            set(&regs.RCC.CCIPR, "I2C" ++ port_name ++ "SEL0", 0b0); // hsi16
+            set(&regs.RCC.CCIPR, "I2C" ++ port_name ++ "SEL1", 0b1); // hsi16
         }
         pub fn disable_clock() void {
             // Enable clock
-            set(regs.RCC.APB1ENR, "I2C" ++ port_name ++ "EN", 0);
+            set(&regs.RCC.APB1ENR, "I2C" ++ port_name ++ "EN", 0);
         }
         pub fn reset() void {
             // Reset API
-            set(regs.RCC.APB1RSTR, "I2C" ++ port_name ++ "RST", 1);
-            set(regs.RCC.APB1RSTR, "I2C" ++ port_name ++ "RST", 0);
+            set(&regs.RCC.APB1RSTR, "I2C" ++ port_name ++ "RST", 1);
+            set(&regs.RCC.APB1RSTR, "I2C" ++ port_name ++ "RST", 0);
         }
         pub fn enable() void {
             port.CR1.modify(.{ .PE = 1 });
@@ -273,7 +277,7 @@ pub fn I2C(comptime port_number: u3) type {
                     port.TIMEOUTR.modify(.{
                         .TIMOUTEN = 1,
                         .TIDLE = 1,
-                        .TIMEOUTA = @intCast(u12, @maximum(1024, val) * 4 - 1),
+                        .TIMEOUTA = @intCast(u12, @max(1024, val) * 4 - 1),
                     });
                 },
                 else => {},
@@ -342,7 +346,7 @@ pub fn I2C(comptime port_number: u3) type {
             port.CR2.modify(.{ .NACK = 1 });
         }
         pub fn wait_until_finished() !void {
-            try core.timeout_wait_for(100, port.ISR, .BUSY, 0);
+            try core.timeout_wait_for(100, &port.ISR, .BUSY, 0);
         }
         pub fn read_data() u8 {
             return port.RXDR.read().RXDATA;
@@ -432,6 +436,9 @@ pub fn I2C(comptime port_number: u3) type {
             while (!has_flag(.tx_buffer_empty)) {
                 if (has_error()) {
                     return error.SendError;
+                }
+                if (!has_flag(.busy)) {
+                    return error.Idle;
                 }
             }
 

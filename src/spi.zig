@@ -1,6 +1,6 @@
 const std = @import("std");
 const microzig = @import("microzig");
-const regs = microzig.chip.registers;
+const regs = microzig.chip.peripherals;
 const gpio = @import("gpio.zig");
 
 const set = @import("core.zig").set_reg_field;
@@ -59,20 +59,22 @@ pub fn SPI(comptime port_number: u3) type {
             }
         }
         pub fn dma_address() u32 {
-            return @ptrToInt(&port.DR.raw);
+            // FIXME
+            //return @ptrToInt(&port.DR);
+            return 0;
         }
         pub fn enable_clock() void {
             // Enable clock
-            set(regs.RCC.APB2ENR, "SPI" ++ port_name ++ "EN", 1);
+            set(&regs.RCC.APB2ENR, "SPI" ++ port_name ++ "EN", 1);
         }
         pub fn disable_clock() void {
             // Enable clock
-            set(regs.RCC.APB2ENR, "SPI" ++ port_name ++ "EN", 0);
+            set(&regs.RCC.APB2ENR, "SPI" ++ port_name ++ "EN", 0);
         }
         pub fn reset() void {
             // Reset API
-            set(regs.RCC.APB2RSTR, "SPI" ++ port_name ++ "RST", 1);
-            set(regs.RCC.APB2RSTR, "SPI" ++ port_name ++ "RST", 0);
+            set(&regs.RCC.APB2RSTR, "SPI" ++ port_name ++ "RST", 1);
+            set(&regs.RCC.APB2RSTR, "SPI" ++ port_name ++ "RST", 0);
         }
         pub fn clear() void {
             write(0);
@@ -88,14 +90,14 @@ pub fn SPI(comptime port_number: u3) type {
         }
         pub fn clean_disable() u16 {
             // Wait until last data is received
-            wait_for(port.SR, .RXNE, 1);
+            wait_for(&port.SR, .RXNE, 1);
             var data: u16 = port.DR.read();
 
             // Wait until last data is transmitted
-            wait_for(port.SR, .TXE, 1);
+            wait_for(&port.SR, .TXE, 1);
 
             // Wait until not busy
-            wait_for(port.SR, .BSY, 0);
+            wait_for(&port.SR, .BSY, 0);
 
             // Disable peripheral
             port.CR1.modify(.{ .SPE = 0 });
@@ -104,20 +106,20 @@ pub fn SPI(comptime port_number: u3) type {
         }
         pub fn wait_until_finished() void {
             // Wait until not busy
-            wait_for(port.SR, .BSY, 0);
+            wait_for(&port.SR, .BSY, 0);
         }
         pub fn write(data: u16) void {
-            port.DR.modify(data);
+            port.DR.modify(.{ .DR = data });
         }
         pub fn send(data: u16) void {
             // Wait for transmit empty
-            wait_for(port.SR, .TXE, 1);
+            wait_for(&port.SR, .TXE, 1);
 
-            port.DR.modify(data);
+            port.DR.modify(.{ .DR = data });
         }
         pub fn read() u16 {
             // Wait for data to be ready
-            wait_for(port.SR, .RXNE, 1);
+            wait_for(&port.SR, .RXNE, 1);
 
             return port.DR.read();
         }

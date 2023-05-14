@@ -1,30 +1,30 @@
 const std = @import("std");
 const microzig = @import("microzig");
-const regs = microzig.chip.registers;
+const regs = microzig.chip.peripherals;
 const set = @import("core.zig").set_reg_field;
 const get = @import("core.zig").reg_field;
 
 pub fn enable_clock() void {
     // Enable clock
-    set(regs.RCC.AHBENR, "DMAEN", 1);
+    set(&regs.RCC.AHBENR, "DMAEN", 1);
 }
 pub fn disable_clock() void {
     // Enable clock
-    set(regs.RCC.AHBENR, "DMAEN", 0);
+    set(&regs.RCC.AHBENR, "DMAEN", 0);
 }
 pub fn reset() void {
     // Reset API
-    set(regs.RCC.AHBRSTR, "DMARST", 1);
-    set(regs.RCC.AHBRSTR, "DMARST", 0);
+    set(&regs.RCC.AHBRSTR, "DMARST", 1);
+    set(&regs.RCC.AHBRSTR, "DMARST", 0);
 }
 
 pub fn Channel(comptime channel_number: u3) type {
-    _ = channel_number;
     const channel_name = std.fmt.comptimePrint("{d}", .{channel_number});
-    const cpar = @field(regs.DMA1, "CPAR" ++ channel_name);
-    const cmar = @field(regs.DMA1, "CMAR" ++ channel_name);
-    const ccr = @field(regs.DMA1, "CCR" ++ channel_name);
-    const cndtr = @field(regs.DMA1, "CNDTR" ++ channel_name);
+    const cpar = &@field(regs.DMA1, "CPAR" ++ channel_name);
+    const cmar = &@field(regs.DMA1, "CMAR" ++ channel_name);
+    const ccr = &@field(regs.DMA1, "CCR" ++ channel_name);
+    const cndtr = &@field(regs.DMA1, "CNDTR" ++ channel_name);
+
     return struct {
         pub fn set_peripheral(peripheral: enum(u4) {
             adc = 0b0000,
@@ -45,7 +45,7 @@ pub fn Channel(comptime channel_number: u3) type {
             tim7_up = 0b1111,
         }) void {
             set(
-                regs.DMA1.CSELR,
+                &regs.DMA1.CSELR,
                 "C" ++ channel_name ++ "S",
                 @enumToInt(peripheral),
             );
@@ -127,10 +127,10 @@ pub fn Channel(comptime channel_number: u3) type {
             global,
         }) bool {
             const val: u32 = switch (flag) {
-                .transfer_error => get(regs.DMA1.ISR, "TEIF" ++ channel_name),
-                .transfer_completed => get(regs.DMA1.ISR, "TCIF" ++ channel_name),
-                .half_transfer => get(regs.DMA1.ISR, "HTIF" ++ channel_name),
-                .global => get(regs.DMA1.ISR, "GIF" ++ channel_name),
+                .transfer_error => get(&regs.DMA1.ISR, "TEIF" ++ channel_name),
+                .transfer_completed => get(&regs.DMA1.ISR, "TCIF" ++ channel_name),
+                .half_transfer => get(&regs.DMA1.ISR, "HTIF" ++ channel_name),
+                .global => get(&regs.DMA1.ISR, "GIF" ++ channel_name),
             };
             return val != 0;
         }
@@ -141,17 +141,17 @@ pub fn Channel(comptime channel_number: u3) type {
             global,
         }) void {
             switch (flag) {
-                .transfer_error => set(regs.DMA1.IFCR, "CTEIF" ++ channel_name, 1),
-                .transfer_completed => set(regs.DMA1.IFCR, "CTCIF" ++ channel_name, 1),
-                .half_transfer => set(regs.DMA1.IFCR, "CHTIF" ++ channel_name, 1),
-                .global => set(regs.DMA1.IFCR, "CGIF" ++ channel_name, 1),
+                .transfer_error => set(&regs.DMA1.IFCR, "CTEIF" ++ channel_name, 1),
+                .transfer_completed => set(&regs.DMA1.IFCR, "CTCIF" ++ channel_name, 1),
+                .half_transfer => set(&regs.DMA1.IFCR, "CHTIF" ++ channel_name, 1),
+                .global => set(&regs.DMA1.IFCR, "CGIF" ++ channel_name, 1),
             }
         }
         pub fn clear_flags() void {
-            set(regs.DMA1.IFCR, "CTEIF" ++ channel_name, 1);
-            set(regs.DMA1.IFCR, "CTCIF" ++ channel_name, 1);
-            set(regs.DMA1.IFCR, "CHTIF" ++ channel_name, 1);
-            set(regs.DMA1.IFCR, "CGIF" ++ channel_name, 1);
+            set(&regs.DMA1.IFCR, "CTEIF" ++ channel_name, 1);
+            set(&regs.DMA1.IFCR, "CTCIF" ++ channel_name, 1);
+            set(&regs.DMA1.IFCR, "CHTIF" ++ channel_name, 1);
+            set(&regs.DMA1.IFCR, "CGIF" ++ channel_name, 1);
         }
     };
 }

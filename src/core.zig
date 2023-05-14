@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const microzig = @import("microzig");
-const regs = microzig.chip.registers;
+const regs = microzig.chip.peripherals;
 const set = @import("core.zig").set_reg_field;
 
 pub fn init_clocks() void {
@@ -138,7 +138,7 @@ fn lock_rtc() void {
 }
 
 pub fn reset() void {
-    regs.SCS.SCB.AIRCR.modify(.{ .VECTKEY = 0x05FA, .SYSRESETREQ = 1 });
+    regs.SCB.AIRCR.modify(.{ .VECTKEYSTAT = 0x05FA, .SYSRESETREQ = 1 });
     while (true) {}
 }
 
@@ -160,11 +160,11 @@ pub fn configure_sleep() void {
 }
 
 pub fn sleep_on_exit(enabled: bool) void {
-    regs.SCS.SCB.SCR.modify(.{ .SLEEPONEXIT = @boolToInt(enabled) });
+    &regs.SCB.SCR.modify(.{ .SLEEPONEXIT = @boolToInt(enabled) });
 }
 
 pub fn sleep_deep(enabled: bool) void {
-    regs.SCS.SCB.SCR.modify(.{ .SLEEPDEEP = @boolToInt(enabled) });
+    &regs.SCB.SCR.modify(.{ .SLEEPDEEP = @boolToInt(enabled) });
 }
 
 pub fn delay(ms: u32) void {
@@ -211,19 +211,19 @@ pub fn clear_alarm_wakeup_flag() void {
 }
 
 pub fn enable_interrupt(comptime id: anytype) void {
-    set(regs.SCS.NVIC.ISER, @tagName(id), 1);
+    set(&regs.NVIC.ISER, @tagName(id), 1);
 }
 
 pub fn disable_interrupt(comptime id: anytype) void {
-    set(regs.SCS.NVIC.ICER, @tagName(id), 1);
+    set(&regs.NVIC.ICER, @tagName(id), 1);
 }
 
 pub fn pend_interrupt(comptime id: anytype) void {
-    set(regs.SCS.NVIC.ISPR, @tagName(id), 1);
+    set(&regs.NVIC.ISPR, @tagName(id), 1);
 }
 
 pub fn unpend_interrupt(comptime id: anytype) void {
-    set(regs.SCS.NVIC.ICPR, @tagName(id), 1);
+    set(&regs.NVIC.ICPR, @tagName(id), 1);
 }
 
 pub fn set_interrupt_priority(comptime id: anytype, priority: enum(u3) {
@@ -239,32 +239,32 @@ pub fn set_interrupt_priority(comptime id: anytype, priority: enum(u3) {
     const name = @tagName(id);
     const pri = @enumToInt(priority);
     if (id == .WWDG or id == .PVD or id == .RTC or id == .FLASH) {
-        set(regs.SCS.NVIC.IP0, name, pri);
+        set(&regs.NVIC.IPR0, name, pri);
     } else if (id == .RCC or id == .EXTI0_1 or id == .EXTI2_3 or id == .EXTI4_15) {
-        set(regs.SCS.NVIC.IP1, name, pri);
+        set(&regs.NVIC.IPR1, name, pri);
     } else if (id == .DMA1_Channel1 or id == .DMA1_Channel2_3 or id == .DMA1_Channel4_7) {
-        set(regs.SCS.NVIC.IP2, name, pri);
+        set(&regs.NVIC.IPR2, name, pri);
     } else if (id == .ADC_COMP or id == .LPTIM1 or id == .USART4_USART5 or id == .TIM2) {
-        set(regs.SCS.NVIC.IP3, name, pri);
+        set(&regs.NVIC.IPR3, name, pri);
     } else if (id == .TIM3 or id == .TIM6 or id == .TIM7) {
-        set(regs.SCS.NVIC.IP4, name, pri);
+        set(&regs.NVIC.IPR4, name, pri);
     } else if (id == .TIM21 or id == .I2C3 or id == .TIM22 or id == .I2C1) {
-        set(regs.SCS.NVIC.IP5, name, pri);
+        set(&regs.NVIC.IPR5, name, pri);
     } else if (id == .I2C2 or id == .SPI1 or id == .SPI2 or id == .USART1) {
-        set(regs.SCS.NVIC.IP6, name, pri);
+        set(&regs.NVIC.IPR6, name, pri);
     } else if (id == .USART2 or id == .AES_RNG_LPUART1) {
-        set(regs.SCS.NVIC.IP7, name, pri);
+        set(&regs.NVIC.IPR7, name, pri);
     } else {
         @compileError("Cannot set interrupt priority");
     }
 }
 
 pub fn enable_interrupts() void {
-    microzig.interrupts.sei();
+    microzig.cpu.enable_interrupts();
 }
 
 pub fn disable_interrupts() void {
-    microzig.interrupts.cli();
+    microzig.cpu.disable_interrupts();
 }
 
 pub fn wait_for_interrupt() void {

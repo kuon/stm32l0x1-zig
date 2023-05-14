@@ -1,15 +1,19 @@
 const microzig = @import("microzig");
-const regs = microzig.chip.registers;
+const regs = microzig.chip.peripherals;
 
 const core = @import("core.zig");
 const set = core.set_reg_field;
 
 pub const LPUART = struct {
     pub fn dma_rx_address() u32 {
-        return @ptrToInt(&regs.LPUART1.RDR.raw);
+        // FIXME
+        return 0;
+        //return @ptrToInt(&regs.LPUART1.RDR.raw);
     }
     pub fn dma_tx_address() u32 {
-        return @ptrToInt(&regs.LPUART1.TDR.raw);
+        // FIXME
+        return 0;
+        // return @ptrToInt(&regs.LPUART1.TDR.raw);
     }
     pub fn reset() void {
         regs.RCC.APB1RSTR.modify(.{ .LPUART1RST = 1 });

@@ -1,4 +1,4 @@
-pub const STM32L011F3Px = struct {
+pub const STM32L0x1 = struct {
     pub const PA0 = struct {
         pub const USART2_RX = 0;
         pub const LPTIM1_IN1 = 1;
@@ -250,4 +250,3 @@ pub const STM32L011F3Px = struct {
         // -
     };
 };
-pub const STM32L011F4Px = STM32L011F3Px;

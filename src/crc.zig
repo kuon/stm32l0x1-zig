@@ -1,5 +1,5 @@
 const microzig = @import("microzig");
-const regs = microzig.chip.registers;
+const regs = microzig.chip.peripherals;
 
 // this produces the same result as
 // std.hash.crc.Crc32.hash(&buf),
@@ -14,11 +14,11 @@ pub fn crc(buf: []const u8) u32 {
         .REV_OUT = 1,
     });
 
-    const dr = @ptrCast(*volatile u8, regs.CRC.DR);
+    const dr = @ptrCast(*volatile u8, &regs.CRC.DR);
 
     for (buf) |b| dr.* = b;
 
-    return @intCast(u32, regs.CRC.DR.*) ^ 0xffffffff;
+    return @intCast(u32, regs.CRC.DR.raw) ^ 0xffffffff;
 }
 
 pub fn reset() void {
